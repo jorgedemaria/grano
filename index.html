@@ -198,10 +198,6 @@
       <input type="range" id="chroma" min="0" max="40" value="0" step="0.5">
     </div>
     <div class="ctrl">
-      <span class="ctrl-label">scanlines</span><span class="ctrl-value" id="scanlinesVal">0.00</span>
-      <input type="range" id="scanlines" min="0" max="1" value="0" step="0.01">
-    </div>
-    <div class="ctrl">
       <span class="ctrl-label">pixelización</span><span class="ctrl-value" id="pixelateVal">1</span>
       <input type="range" id="pixelate" min="1" max="32" value="1" step="1">
     </div>
@@ -213,7 +209,6 @@
       <span class="ctrl-label">intensidad tint</span><span class="ctrl-value" id="tintOpacityVal">0.00</span>
       <input type="range" id="tintOpacity" min="0" max="1" value="0" step="0.01">
     </div>
-    <div class="tint-section-label">Primarios y secundarios</div>
     <div class="ctrl">
       <div class="tint-preset-grid">
         <div class="tint-swatch active" style="background:#ffffff" data-color="#ffffff" title="Blanco"></div>
@@ -261,7 +256,7 @@
 
   // ── State ──────────────────────────────────────────
   let intensity=60, opacity=0.35, speed=4, colorNoise=0;
-  let dreamy=0, vignette=0, chroma=0, scanlines=0, pixelate=1;
+  let dreamy=0, vignette=0, chroma=0, pixelate=1;
   let exposure=0, contrast=0, saturation=0;
   let tintColor=[255,255,255], tintOpacity=0;
   let lastFrame=0, busy=false, chromaTime=0;
@@ -431,14 +426,7 @@
       tCtx.restore();
     }
 
-    // 6. Scanlines
-    if (scanlines > 0) {
-      tCtx.save(); tCtx.globalAlpha=scanlines*0.6;
-      for (let y=0;y<h;y+=2) { tCtx.fillStyle='#000'; tCtx.fillRect(0,y,w,1); }
-      tCtx.restore();
-    }
-
-    // 7. Vignette
+    // 6. Vignette
     if (vignette > 0) {
       const grad = tCtx.createRadialGradient(w/2,h/2,h*0.2,w/2,h/2,h*0.85);
       grad.addColorStop(0,'rgba(0,0,0,0)');
@@ -656,7 +644,6 @@
   bind('dreamy',     v=>dreamy=v,     v=>v.toFixed(2));
   bind('vignette',   v=>vignette=v,   v=>v.toFixed(2));
   bind('chroma',     v=>chroma=v,     v=>v);
-  bind('scanlines',  v=>scanlines=v,  v=>v.toFixed(2));
   bind('pixelate',   v=>pixelate=v,   v=>v);
   bind('exposure',   v=>exposure=v,   v=>(v>0?'+':'')+v);
   bind('contrast',   v=>contrast=v,   v=>(v>0?'+':'')+v);
