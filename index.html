@@ -40,6 +40,7 @@
     .btn:disabled { opacity: 0.3; cursor: not-allowed; }
     .btn.primary { border-color: #333; color: var(--text); background: #1e1e1e; }
     .btn.primary:hover { background: #252525; border-color: #555; }
+    .mobile-controls-toggle { display: none; }
     #upload { display: none; }
     .canvas-area {
       grid-area: canvas; display: flex; align-items: center; justify-content: center;
@@ -112,10 +113,114 @@
     .panel::-webkit-scrollbar { width: 4px; }
     .panel::-webkit-scrollbar-track { background: transparent; }
     .panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .panel-backdrop { display: none; }
     @media (max-width: 700px) {
-      body { grid-template-columns: 1fr; grid-template-areas: "header" "canvas" "panel" "footer"; }
-      .panel { border-left: none; border-top: 1px solid var(--border); }
-      .canvas-area { padding: 12px; }
+      body {
+        height: 100dvh;
+        overflow: hidden;
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        grid-template-areas: "header" "canvas" "footer";
+      }
+      header, footer { position: relative; z-index: 30; background: rgba(14,14,14,0.92); backdrop-filter: blur(10px); }
+      .header-actions .mobile-controls-toggle { display: none; }
+      footer .mobile-controls-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 96px;
+        margin-left: auto;
+        justify-self: end;
+      }
+      .canvas-area {
+        padding: 10px;
+        align-items: center;
+        justify-content: center;
+        min-height: 0;
+      }
+      #canvasWrap,
+      #canvasWrap canvas {
+        max-width: 100%;
+        max-height: 100%;
+      }
+      .panel {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-height: 72dvh;
+        border: 1px solid var(--border);
+        border-bottom: none;
+        border-radius: 18px 18px 0 0;
+        box-shadow: none;
+        background: rgba(22,22,22,0.10);
+        min-height: 0;
+        transform: translateY(calc(100% + 18px));
+        opacity: 0;
+        pointer-events: none;
+        transition: transform 0.22s ease, opacity 0.22s ease;
+        z-index: 25;
+        overscroll-behavior: contain;
+        backdrop-filter: blur(6px);
+      }
+      body.controls-open .panel {
+        transform: translateY(0);
+        opacity: 1;
+        pointer-events: auto;
+      }
+      body.controls-open .panel.is-adjusting {
+        opacity: 0.3;
+        background: rgba(22,22,22,0.02);
+        backdrop-filter: blur(0);
+      }
+      .panel::before {
+        content: '';
+        position: sticky;
+        top: 0;
+        display: block;
+        width: 44px;
+        height: 4px;
+        margin: 10px auto 6px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.18);
+      }
+      body.controls-open .panel.is-adjusting::before {
+        background: rgba(255,255,255,0.3);
+      }
+      .panel-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: transparent;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.22s ease;
+        z-index: 20;
+      }
+      body.controls-open .panel-backdrop {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      footer {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto auto;
+        align-items: center;
+        padding: 8px 12px;
+        gap: 8px 12px;
+      }
+      #status {
+        grid-column: 1;
+        min-width: 0;
+      }
+      footer .mobile-controls-toggle {
+        grid-column: 2;
+      }
+      .progress-wrap {
+        grid-column: 1 / -1;
+        width: 100%;
+      }
     }
   </style>
 </head>
@@ -124,6 +229,7 @@
 <header>
   <div class="logo">GRANO<span>v1.0</span></div>
   <div class="header-actions">
+    <button class="btn mobile-controls-toggle" id="controlsToggle" aria-controls="controlsPanel" aria-expanded="false">controles</button>
     <label class="btn primary" id="uploadLabel">
       <input type="file" id="upload" accept="image/*">↑ cargar imagen
     </label>
@@ -145,7 +251,7 @@
   </div>
 </div>
 
-<aside class="panel">
+<aside class="panel" id="controlsPanel">
 
   <div class="panel-section">
     <div class="section-title">Grain</div>
@@ -240,10 +346,12 @@
 
 <footer>
   <div id="status">listo</div>
+  <button class="btn mobile-controls-toggle" id="controlsToggleFooter" aria-controls="controlsPanel" aria-expanded="false">controles</button>
   <div class="progress-wrap" id="progressWrap">
     <div class="progress-fill" id="progressFill"></div>
   </div>
 </footer>
+<div class="panel-backdrop" id="panelBackdrop"></div>
 <div id="hint"></div>
 
 <script>
@@ -453,6 +561,84 @@
   const progressWrap = document.getElementById('progressWrap');
   const progressFill = document.getElementById('progressFill');
   const hint         = document.getElementById('hint');
+  const controlsToggle = document.getElementById('controlsToggle');
+  const controlsToggleFooter = document.getElementById('controlsToggleFooter');
+  const panelBackdrop  = document.getElementById('panelBackdrop');
+  const controlsPanel  = document.getElementById('controlsPanel');
+
+  function syncMobilePanelBounds() {
+    const header = document.querySelector('header');
+    const footer = document.querySelector('footer');
+    const mobile = window.matchMedia('(max-width: 700px)').matches;
+    if (!mobile) {
+      document.documentElement.style.removeProperty('--mobile-panel-top');
+      document.documentElement.style.removeProperty('--mobile-panel-bottom');
+      document.body.classList.remove('controls-open');
+      controlsToggle?.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    document.documentElement.style.setProperty('--mobile-panel-top', `${Math.round(header.getBoundingClientRect().height)}px`);
+    document.documentElement.style.setProperty('--mobile-panel-bottom', `${Math.round(footer.getBoundingClientRect().height)}px`);
+  }
+
+  function setControlsOpen(isOpen) {
+    document.body.classList.toggle('controls-open', isOpen);
+    controlsToggle?.setAttribute('aria-expanded', String(isOpen));
+    controlsToggleFooter?.setAttribute('aria-expanded', String(isOpen));
+  }
+
+  function setPanelAdjusting(isAdjusting) {
+    controlsPanel.classList.toggle('is-adjusting', isAdjusting);
+  }
+  let panelAdjustingTimer = null;
+  function clearPanelAdjusting() {
+    if (panelAdjustingTimer) {
+      clearTimeout(panelAdjustingTimer);
+      panelAdjustingTimer = null;
+    }
+    setPanelAdjusting(false);
+  }
+  function startPanelAdjusting() {
+    if (!window.matchMedia('(max-width: 700px)').matches) return;
+    if (panelAdjustingTimer) {
+      clearTimeout(panelAdjustingTimer);
+      panelAdjustingTimer = null;
+    }
+    setPanelAdjusting(true);
+  }
+  function queueClearPanelAdjusting() {
+    if (!window.matchMedia('(max-width: 700px)').matches) return;
+    if (panelAdjustingTimer) clearTimeout(panelAdjustingTimer);
+    panelAdjustingTimer = setTimeout(() => {
+      setPanelAdjusting(false);
+      panelAdjustingTimer = null;
+    }, 140);
+  }
+
+  controlsToggle?.addEventListener('click', () => {
+    setControlsOpen(!document.body.classList.contains('controls-open'));
+  });
+  controlsToggleFooter?.addEventListener('click', () => {
+    setControlsOpen(!document.body.classList.contains('controls-open'));
+  });
+  panelBackdrop?.addEventListener('click', () => setControlsOpen(false));
+  window.addEventListener('resize', syncMobilePanelBounds);
+  window.addEventListener('orientationchange', syncMobilePanelBounds);
+  syncMobilePanelBounds();
+
+  document.querySelectorAll('.panel input[type="range"]').forEach(input => {
+    input.addEventListener('pointerdown', startPanelAdjusting);
+    input.addEventListener('touchstart', startPanelAdjusting, { passive: true });
+    input.addEventListener('focusin', startPanelAdjusting);
+    input.addEventListener('input', startPanelAdjusting);
+    input.addEventListener('pointerup', queueClearPanelAdjusting);
+    input.addEventListener('pointercancel', queueClearPanelAdjusting);
+    input.addEventListener('touchend', queueClearPanelAdjusting);
+    input.addEventListener('touchcancel', queueClearPanelAdjusting);
+    input.addEventListener('change', queueClearPanelAdjusting);
+    input.addEventListener('blur', queueClearPanelAdjusting);
+    input.addEventListener('focusout', queueClearPanelAdjusting);
+  });
 
   function syncTintUI() {
     return;
