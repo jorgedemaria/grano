@@ -76,7 +76,20 @@
     }
     .tint-swatch:hover { transform: scale(1.15); }
     .tint-swatch.active { border-color: var(--accent); }
-    #tintColorPicker { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; padding: 0; background: none; overflow: hidden; flex-shrink: 0; }
+    .tint-section-label {
+      grid-column: 1/-1;
+      margin: 4px 0 2px;
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .tint-preset-grid { grid-column: 1/-1; display: grid; grid-template-columns: repeat(7, 22px); gap: 8px; align-items: center; }
+    #tintColorPicker {
+      width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border);
+      cursor: pointer; padding: 0; background: none; overflow: hidden; flex-shrink: 0;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.02);
+    }
     .res-btns { grid-column: 1/-1; display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
     .res-btn {
       padding: 5px 10px; border: 1px solid var(--border); border-radius: 4px;
@@ -198,17 +211,19 @@
     <div class="section-title">Tint</div>
     <div class="ctrl">
       <span class="ctrl-label">intensidad tint</span><span class="ctrl-value" id="tintOpacityVal">0.00</span>
-      <input type="range" id="tintOpacity" min="0" max="0.6" value="0" step="0.01">
+      <input type="range" id="tintOpacity" min="0" max="1" value="0" step="0.01">
     </div>
+    <div class="tint-section-label">Primarios y secundarios</div>
     <div class="ctrl">
-      <div class="tint-row">
-        <div class="tint-swatch active" style="background:#ffffff" data-color="#ffffff"></div>
-        <div class="tint-swatch" style="background:#c8a87a" data-color="#c8a87a"></div>
-        <div class="tint-swatch" style="background:#6fa8d4" data-color="#6fa8d4"></div>
-        <div class="tint-swatch" style="background:#a8d4a0" data-color="#a8d4a0"></div>
-        <div class="tint-swatch" style="background:#d4a8c8" data-color="#d4a8c8"></div>
-        <div class="tint-swatch" style="background:#d4c8a8" data-color="#d4c8a8"></div>
-        <input type="color" id="tintColorPicker" value="#ffffff">
+      <div class="tint-preset-grid">
+        <div class="tint-swatch active" style="background:#ffffff" data-color="#ffffff" title="Blanco"></div>
+        <div class="tint-swatch" style="background:#ff3b30" data-color="#ff3b30" title="Rojo"></div>
+        <div class="tint-swatch" style="background:#34c759" data-color="#34c759" title="Verde"></div>
+        <div class="tint-swatch" style="background:#007aff" data-color="#007aff" title="Azul"></div>
+        <div class="tint-swatch" style="background:#00c7ff" data-color="#00c7ff" title="Cian"></div>
+        <div class="tint-swatch" style="background:#ff2d55" data-color="#ff2d55" title="Magenta"></div>
+        <div class="tint-swatch" style="background:#ffd60a" data-color="#ffd60a" title="Amarillo"></div>
+        <input type="color" id="tintColorPicker" value="#ffffff" title="Color personalizado">
       </div>
     </div>
   </div>
@@ -370,11 +385,34 @@
 
     // 4. Tint
     if (tintOpacity > 0) {
-      tCtx.save();
-      tCtx.globalAlpha=tintOpacity; tCtx.globalCompositeOperation='multiply';
-      tCtx.fillStyle=`rgb(${tintColor[0]},${tintColor[1]},${tintColor[2]})`;
-      tCtx.fillRect(0,0,w,h);
-      tCtx.restore();
+      const p = Math.min(1, tintOpacity);
+      const id = tCtx.getImageData(0, 0, w, h);
+      const d = id.data;
+      const shadow = [
+        Math.max(0, Math.round(tintColor[0] * 0.28)),
+        Math.max(0, Math.round(tintColor[1] * 0.28)),
+        Math.max(0, Math.round(tintColor[2] * 0.28))
+      ];
+      const highlight = [
+        Math.min(255, Math.round(tintColor[0] * 0.92 + 12)),
+        Math.min(255, Math.round(tintColor[1] * 0.92 + 12)),
+        Math.min(255, Math.round(tintColor[2] * 0.92 + 12))
+      ];
+      const threshold = 128 + (0.5 - p) * 38;
+      const spread = 40 - p * 10;
+      for (let i = 0; i < d.length; i += 4) {
+        const lum = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+        const x = Math.max(0, Math.min(1, (lum - (threshold - spread)) / (spread * 2)));
+        const mask = x * x * (3 - 2 * x);
+        const toneR = shadow[0] * (1 - mask) + highlight[0] * mask;
+        const toneG = shadow[1] * (1 - mask) + highlight[1] * mask;
+        const toneB = shadow[2] * (1 - mask) + highlight[2] * mask;
+        const mix = 0.12 + p * 0.7;
+        d[i] = Math.round(d[i] * (1 - mix) + toneR * mix);
+        d[i + 1] = Math.round(d[i + 1] * (1 - mix) + toneG * mix);
+        d[i + 2] = Math.round(d[i + 2] * (1 - mix) + toneB * mix);
+      }
+      tCtx.putImageData(id, 0, 0);
     }
 
     // 5. Grain
@@ -427,6 +465,10 @@
   const progressWrap = document.getElementById('progressWrap');
   const progressFill = document.getElementById('progressFill');
   const hint         = document.getElementById('hint');
+
+  function syncTintUI() {
+    return;
+  }
 
   function setUI(isBusy, msg='') {
     busy = isBusy;
@@ -633,12 +675,15 @@
       sw.classList.add('active');
       tintColor=hexToRgb(sw.dataset.color);
       document.getElementById('tintColorPicker').value=sw.dataset.color;
+      syncTintUI();
     });
   });
   document.getElementById('tintColorPicker').addEventListener('input',e=>{
     tintColor=hexToRgb(e.target.value);
     document.querySelectorAll('.tint-swatch').forEach(s=>s.classList.remove('active'));
+    syncTintUI();
   });
+  syncTintUI();
 
   // ══════════════════════════════════════════════════
   // GIF encoder: Median Cut + Ordered Dither + LZW
